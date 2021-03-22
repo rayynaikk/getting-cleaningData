@@ -1,101 +1,54 @@
-# Step 1: Read all the relavant files
-strain <- read.table(file="subject_train.txt")
-head(strain)
-str(strain)
+### 1- Getting the data and uploading the right packages
+# Downloading the files only if they haven't been yet.
 
-stest <- read.table(file="subject_test.txt")
-head(stest)
-str(stest)
-
-xtrain <- read.table(file="X_train.txt", header = FALSE) # We dont need the default header as we will add header from the feature
-head(xtrain)
-str(xtrain)
-
-xtest <- read.table(file="X_test.txt", header = FALSE)
-head(xtest)
-str(xtest)
-
-ytrain <- read.table(file="y_train.txt")
-head(ytrain)
-str(ytrain)
-
-ytest <- read.table(file="y_test.txt")
-head(ytest)
-str(ytest)
-
-alabels <- read.table(file="activity_labels.txt")
-head(alabels)
-str(alabels)
-
-features <- read.table(file="features.txt")
-head(features)
-str(features)
-features <- gsub("-","",features$V2) #Keep only the second column which will be the header and also removing the hyphen
-head(features)
-str(features) # This shows we have 561 headings to match the 561 columns in the train/test dataframes
-
-# Step 2: Adding headings
-colnames(strain) <- c("subject")
-head(strain)
-colnames(stest) <- c("subject")
-head(stest)
-colnames(ytrain) <- c("trainlabel")
-head(ytrain)
-tail(ytrain)
-colnames(ytest) <- c("trainlabel")
-head(ytest)
-tail(ytest)
-colnames(xtrain) <- c(features)
-str(xtrain)
-colnames(xtest) <- c(features)
-str(xtest)
-colnames(alabels) <- c("tlabel", "descrptvlables")
-head(alabels)
-
-# Step 3: Adding the subject & activity lable column to both the train and test dataframes. So now we will have 563 variables
-newxtrain <- cbind(xtrain, strain, ytrain)
-str(newxtrain)
-head(newxtrain)
-newxtest <- cbind(xtest, stest, ytest)
-str(newxtest)
-head(newxtest)
-
-# Step 4: Merging the two dataframes. Train has 7352 obs, test has 2947. Each has 563 columns
-# So after merging there should be 10299 records and 563 columns
-final <- rbind(newxtrain, newxtest)
-head(final)
-str(final)
-
-# Step 5: Extracting all with standard deviation and mean
-final1 <- final[,grep("mean|std|subject|trainlabel",names(final))]
-head(final1)
-str(final1)
-
-# Step 6: Adding the dexscriptive lables for the activities
-install.packages("plyr")
-library(plyr)
-final2 <- merge(final1,alabels, by.x= "trainlabel", by.y = "tlabel", all = TRUE)
-head(final2)
-str(final2)
-
-# Step 7: Creating the new dataframe of means by activity and subject
-install.packages("reshape")
+path <- getwd()
+if (!file.exists(file.path(path, "dataset.zip"))){
+      url <- "https://d396qusza40orc.cloudfront.net/getdata%2Fprojectfiles%2FUCI%20HAR%20Dataset.zip"
+      download.file(url, file.path(path,"dataset.zip"))
+      unzip(zipfile="dataset.zip")
+} 
+library(data.table)
 library(reshape2)
-# Subsetting into a dataframe that has means and the subject and descriptive lables
-final3 <- final2[,grep("mean|subject|descrptvlables",names(final2))]
-head(final3)
-str(final3)
-namelist <- names(final3)
-head(namelist)
-tail(namelist)
-# Seggregating the sub
-rest <- select(final3, -(subject:descrptvlables))
-str(rest)
-final4 <- melt(final3, id=c("subject", "descrptvlables"), measure.vars=c(rest))
-final5 <- dcast(final4, subject+descrptvlables~variable, mean)
-head(final5)
+library(dplyr)
 
-# Step 8: Writing the dataframe to a text file:
-write.table(final5, file = "Dataforchatper3week4.txt", row.names = FALSE)
+### 2- Getting the index of the variables
 
+activity_labels <- fread(file.path(path,"UCI HAR Dataset/activity_labels.txt"))
+features <- fread(file.path(path,"UCI HAR Dataset/features.txt"))
+
+### 3-Loading the train and test data sets
+subject_test <- fread("UCI\ HAR\ Dataset/test/subject_test.txt")
+x_test <- fread("UCI\ HAR\ Dataset/test/X_test.txt")
+y_test <- fread("UCI\ HAR\ Dataset/test/y_test.txt")
+subject_test <- fread("UCI\ HAR\ Dataset/test/subject_test.txt")
+
+subject_train <- fread("UCI\ HAR\ Dataset/train/subject_train.txt")
+x_train <- fread("UCI\ HAR\ Dataset/train/X_train.txt")
+y_train <- fread("UCI\ HAR\ Dataset/train/y_train.txt")
+subject_train <- fread("UCI\ HAR\ Dataset/train/subject_train.txt")
+
+### 4-Merging the datasets and selecting means and standard deviation features
+#we also tidy up by removing the parentheses in the feature names.
+index<- grep("([Mm]ean|[Ss]td)",features$V2)
+features$V2 <- gsub("[()]", "", features$V2)
+x_test<-select(x_test,index)
+x_train<-select(x_train,index)
+x_test<-cbind(subject_test,y_test,x_test)
+x_train<-cbind(subject_train,y_train,x_train)
+names(x_test)<-c("subject","activity",features$V2[index])
+names(x_train)<-c("subject","activity",features$V2[index])
+x<-rbind(x_test,x_train)
+
+### 5- changing the activities into names
+#we take the name of the activities in activity_labels and switch the numbers in x$activity
+#by these strings.
+x$activity<-sapply(x$activity, function(x) activity_labels$V2[x])
+
+### 6- melting the activities with the subject in order to get the mean
+#of every variable
+y<-melt(x, id=c("activity","subject"))
+y<-dcast(y,subject+activity~variable,fun.aggregate=mean)
+
+
+fwrite(y, file = "tidyData.txt", quote = FALSE)
 
